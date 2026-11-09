@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Authenticator</title>
+<style>
+  :root{
+    --ink:#171725; --muted:#8a8fa3; --line:#e9e9ef;
+    --purple:#7184f4; --purple-dark:#5364c4; --lavender:#eef0ff;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; min-height:100vh; display:grid; place-items:center;
+    padding:28px 16px; color:var(--ink);
+    font-family:Inter,"Noto Sans KR",system-ui,-apple-system,"Segoe UI",sans-serif;
+    background:
+      radial-gradient(circle at 18% 22%, rgba(133,156,255,.26) 0, transparent 30%),
+      radial-gradient(circle at 84% 78%, rgba(181,133,255,.16) 0, transparent 28%),
+      #f5f6ff;
+  }
+
+  /* 휴대폰 프레임 */
+  .phone{
+    width:min(380px,100%); border-radius:34px; padding:14px;
+    background:linear-gradient(160deg,#20243b,#111428);
+    box-shadow:0 30px 70px rgba(32,38,80,.32), 0 0 0 1px rgba(255,255,255,.06);
+  }
+  .screen{
+    border-radius:24px; overflow:hidden; background:#fbfbff;
+    min-height:560px; display:flex; flex-direction:column;
+  }
+  .notch{
+    height:26px; display:grid; place-items:center;
+  }
+  .notch i{ display:block; width:92px; height:6px; border-radius:4px; background:rgba(255,255,255,.22); }
+
+  .appbar{
+    padding:18px 20px 14px; border-bottom:1px solid var(--line);
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .appbar h1{ margin:0; font-size:15px; letter-spacing:-.02em; }
+  .appbar .mark{ color:var(--purple); font-size:18px; }
+  .appbar .clock{ color:var(--muted); font-size:11px; font-variant-numeric:tabular-nums; }
+
+  .list{ flex:1; padding:14px 16px 8px; display:flex; flex-direction:column; gap:12px; overflow-y:auto; }
+
+  /* 계정 카드 */
+  .acct{
+    position:relative; padding:17px 18px; border-radius:16px;
+    border:1px solid var(--line); background:#fff;
+    box-shadow:0 6px 18px rgba(80,94,180,.07);
+    cursor:pointer; transition:transform .15s, box-shadow .15s;
+  }
+  .acct:hover{ transform:translateY(-1px); box-shadow:0 10px 24px rgba(80,94,180,.13); }
+  /* 오른쪽 위 삭제 버튼과 겹치지 않도록 여백을 둔다 */
+  .acct .issuer{ padding-right:34px; color:var(--purple); font-size:9.5px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; }
+  .acct .user{ margin:3px 0 10px; padding-right:34px; color:var(--muted); font-size:11px; }
+  .row{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .code{
+    font-family:ui-monospace,Consolas,monospace; font-size:33px; font-weight:600;
+    letter-spacing:.07em; line-height:1; color:var(--ink);
+    font-variant-numeric:tabular-nums;
+  }
+  .code.warn{ color:#d2455c; }
+  /* 복사됨 배지 — 삭제 버튼 왼쪽에 둔다 (겹치지 않게) */
+  .copied{
+    position:absolute; right:34px; top:12px; padding:3px 9px; border-radius:20px;
+    background:var(--purple); color:#fff; font-size:9px; font-weight:600;
+    opacity:0; transform:translateY(-3px); transition:opacity .2s, transform .2s; pointer-events:none;
+  }
+  .copied.show{ opacity:1; transform:translateY(0); }
+
+  /* 남은 시간 링 */
+  .ring{ width:42px; height:42px; flex:0 0 auto; }
+  .ring circle{ fill:none; stroke-width:4; }
+  .ring .bg{ stroke:#e8ebf8; }
+  .ring .fg{ stroke:var(--purple); stroke-linecap:round; transition:stroke-dashoffset .95s linear, stroke .3s; }
+  .ring .fg.warn{ stroke:#e0526a; }
+  .ring text{ font-size:13px; font-weight:700; fill:var(--muted); font-family:inherit; }
+
+  .hint{ margin:2px 2px 0; color:var(--muted); font-size:10px; line-height:1.6; }
+
+  /* 계정 추가 */
+  .add{ padding:14px 16px 18px; border-top:1px solid var(--line); background:#fafbff; }
+  .add summary{
+    cursor:pointer; color:var(--purple); font-size:11px; font-weight:600;
+    padding:4px 0; outline:none; list-style:none;
+  }
+  .add summary::-webkit-details-marker{ display:none }
+  .add summary::before{ content:'+ '; font-weight:700; }
+  .add form{ margin-top:11px; display:flex; flex-direction:column; gap:7px; }
+  .add label{ font-size:10px; font-weight:600; color:#39415a; }
+  .add input{
+    height:36px; padding:0 11px; border:1px solid var(--line); border-radius:8px;
+    font-size:11px; font-family:inherit; outline:none; background:#fff;
+  }
+  .add input:focus{ border-color:#8394ff; box-shadow:0 0 0 3px rgba(113,132,244,.15); }
+  .add button{
+    height:36px; margin-top:4px; border:0; border-radius:8px; cursor:pointer;
+    color:#fff; background:linear-gradient(135deg,#7b8cff,#5969d3);
+    font-size:11px; font-weight:600; font-family:inherit;
+  }
+  .add .err{ margin:4px 0 0; color:#d2455c; font-size:10px; min-height:13px; }
+
+  .empty{ padding:40px 10px; text-align:center; color:var(--muted); font-size:11.5px; line-height:1.7; }
+  /* 삭제 버튼 — 오른쪽 위. 예전엔 오른쪽 아래라 남은 시간 링과 겹쳤다. */
+  .del{
+    position:absolute; right:10px; top:9px;
+    width:22px; height:22px; display:grid; place-items:center;
+    border:0; border-radius:50%; background:transparent;
+    color:#c9ccda; font-size:11px; line-height:1; cursor:pointer; padding:0;
+    transition:color .15s, background .15s;
+  }
+  .del:hover{ color:#d2455c; background:#fdeef1; }
+  .del:focus-visible{ outline:2px solid #b9cbfb; outline-offset:1px; }
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="notch"><i></i></div>
+  <div class="screen">
+    <div class="appbar">
+      <h1><span class="mark">✱</span> Authenticator</h1>
+      <span class="clock" id="clock">--:--:--</span>
+    </div>
+
+    <div class="list" id="list"></div>
+
+    <details class="add">
+      <summary>계정 추가</summary>
+      <form id="addForm" autocomplete="off">
+        <label for="issuer">서비스 이름</label>
+        <input id="issuer" value="sunrinNS.com" required />
+        <label for="user">아이디</label>
+        <input id="user" placeholder="student" required />
+        <label for="secret">OTP 비밀키 (Base32)</label>
+        <input id="secret" placeholder="가입 화면에 표시된 비밀키" required />
+        <button type="submit">추가</button>
+        <p class="err" id="addErr"></p>
+      </form>
+    </details>
+  </div>
+</div>
+
+<script>
+/* ───── Base32 디코드 ───── */
+function b32decode(s){
+  const M='ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  s=(s||'').toUpperCase().replace(/[=\s-]/g,'');
+  let bits='';
+  for(const ch of s){ const v=M.indexOf(ch); if(v<0) return null; bits+=v.toString(2).padStart(5,'0'); }
+  const out=[];
+  for(let i=0;i+8<=bits.length;i+=8) out.push(parseInt(bits.substr(i,8),2));
+  return new Uint8Array(out);
+}
+
+/* ───── SHA-1 (순수 JS — file:// 에서도 동작하도록 Web Crypto 미사용) ───── */
+function sha1(bytes){
+  const ml=bytes.length*8;
+  const total=((((bytes.length+8)>>6)+1)<<6);
+  const buf=new Uint8Array(total); buf.set(bytes); buf[bytes.length]=0x80;
+  const dv=new DataView(buf.buffer);
+  dv.setUint32(total-8, Math.floor(ml/4294967296), false);
+  dv.setUint32(total-4, ml>>>0, false);
+
+  let h0=0x67452301,h1=0xEFCDAB89,h2=0x98BADCFE,h3=0x10325476,h4=0xC3D2E1F0;
+  const w=new Uint32Array(80);
+  for(let i=0;i<total;i+=64){
+    for(let j=0;j<16;j++) w[j]=dv.getUint32(i+j*4,false);
+    for(let j=16;j<80;j++){ const n=w[j-3]^w[j-8]^w[j-14]^w[j-16]; w[j]=((n<<1)|(n>>>31))>>>0; }
+    let a=h0,b=h1,c=h2,d=h3,e=h4;
+    for(let j=0;j<80;j++){
+      let f,k;
+      if(j<20){ f=(b&c)|((~b)&d); k=0x5A827999; }
+      else if(j<40){ f=b^c^d; k=0x6ED9EBA1; }
+      else if(j<60){ f=(b&c)|(b&d)|(c&d); k=0x8F1BBCDC; }
+      else { f=b^c^d; k=0xCA62C1D6; }
+      const t=((((a<<5)|(a>>>27))>>>0)+f+e+k+w[j])>>>0;
+      e=d; d=c; c=((b<<30)|(b>>>2))>>>0; b=a; a=t;
+    }
+    h0=(h0+a)>>>0; h1=(h1+b)>>>0; h2=(h2+c)>>>0; h3=(h3+d)>>>0; h4=(h4+e)>>>0;
+  }
+  const out=new Uint8Array(20), odv=new DataView(out.buffer);
+  odv.setUint32(0,h0,false); odv.setUint32(4,h1,false); odv.setUint32(8,h2,false);
+  odv.setUint32(12,h3,false); odv.setUint32(16,h4,false);
+  return out;
+}
+
+function cat(a,b){ const o=new Uint8Array(a.length+b.length); o.set(a); o.set(b,a.length); return o; }
+
+function hmacSha1(key,msg){
+  const B=64;
+  if(key.length>B) key=sha1(key);
+  const k=new Uint8Array(B); k.set(key);
+  const ip=new Uint8Array(B), op=new Uint8Array(B);
+  for(let i=0;i<B;i++){ ip[i]=k[i]^0x36; op[i]=k[i]^0x5c; }
+  return sha1(cat(op, sha1(cat(ip,msg))));
+}
+
+/* ───── TOTP (RFC 6238) ───── */
+function totp(secret, epoch, step=30, digits=6){
+  const key=b32decode(secret); if(!key||!key.length) return null;
+  const counter=Math.floor(epoch/step);
+  const buf=new Uint8Array(8), dv=new DataView(buf.buffer);
+  dv.setUint32(0, Math.floor(counter/4294967296), false);
+  dv.setUint32(4, counter>>>0, false);
+  const h=hmacSha1(key,buf);
+  const off=h[19]&0xf;
+  const n=(((h[off]&0x7f)<<24)|(h[off+1]<<16)|(h[off+2]<<8)|h[off+3])>>>0;
+  return String(n % Math.pow(10,digits)).padStart(digits,'0');
+}
+
+/* ───── 저장소 ───── */
+const KEY='lumio.authenticator.accounts';
+
+/* 실습 기본 계정. localStorage 를 못 쓰는 환경(file:// 등)에서도
+   바로 코드가 보이도록 시드로 넣어 둔다. 삭제하거나 덮어쓸 수 있다. */
+const SEED=[{issuer:'sunrinNS.com', user:'student', secret:'DR2547UCQLFQNCWIQPREE4LTLK7YZYBF'}];
+
+function load(){
+  try{
+    const raw=localStorage.getItem(KEY);
+    if(raw!==null){ const v=JSON.parse(raw); if(Array.isArray(v)) return v; }
+  }catch(e){}
+  return SEED.slice();
+}
+function save(a){ try{ localStorage.setItem(KEY, JSON.stringify(a)); }catch(e){} }
+
+let accounts = load();
+
+/* ───── 렌더 ───── */
+const listEl=document.getElementById('list');
+
+function render(){
+  if(!accounts.length){
+    listEl.innerHTML='<div class="empty">등록된 계정이 없습니다.<br />아래 <b>계정 추가</b>에서 가입 때 받은<br />OTP 비밀키를 넣어 주세요.</div>';
+    return;
+  }
+  listEl.innerHTML = accounts.map((a,i)=>`
+    <div class="acct" data-i="${i}">
+      <span class="copied" id="cp${i}">복사됨</span>
+      <div class="issuer">${esc(a.issuer)}</div>
+      <div class="user">${esc(a.user)}</div>
+      <div class="row">
+        <span class="code" id="code${i}">------</span>
+        <svg class="ring" viewBox="0 0 42 42" aria-hidden="true">
+          <circle class="bg" cx="21" cy="21" r="17"></circle>
+          <circle class="fg" id="ring${i}" cx="21" cy="21" r="17"
+                  transform="rotate(-90 21 21)" stroke-dasharray="106.8" stroke-dashoffset="0"></circle>
+          <text id="sec${i}" x="21" y="25" text-anchor="middle">30</text>
+        </svg>
+      </div>
+      <button class="del" data-del="${i}" title="삭제" aria-label="삭제">✕</button>
+    </div>`).join('');
+  tick();
+}
+function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+/* ───── 1초마다 갱신 ───── */
+function tick(){
+  const now = Date.now()/1000;
+  const left = 30 - Math.floor(now % 30);
+  const C = 2*Math.PI*17;
+
+  document.getElementById('clock').textContent = new Date().toLocaleTimeString('ko-KR',{hour12:false});
+
+  accounts.forEach((a,i)=>{
+    const codeEl=document.getElementById('code'+i);
+    const ringEl=document.getElementById('ring'+i);
+    const secEl=document.getElementById('sec'+i);
+    if(!codeEl) return;
+    const c = totp(a.secret, now);
+    codeEl.textContent = c ? c.slice(0,3)+' '+c.slice(3) : '오류';
+    secEl.textContent = left;
+    ringEl.setAttribute('stroke-dashoffset', String(C*(1-left/30)));
+    const warn = left<=5;
+    codeEl.classList.toggle('warn',warn);
+    ringEl.classList.toggle('warn',warn);
+  });
+}
+setInterval(tick,1000);
+
+/* ───── 탭하면 복사 ───── */
+listEl.addEventListener('click',(e)=>{
+  const del=e.target.closest('[data-del]');
+  if(del){
+    e.stopPropagation();
+    accounts.splice(Number(del.dataset.del),1); save(accounts); render(); return;
+  }
+  const card=e.target.closest('.acct'); if(!card) return;
+  const i=card.dataset.i;
+  const code=document.getElementById('code'+i).textContent.replace(/\s/g,'');
+  const badge=document.getElementById('cp'+i);
+  const done=()=>{ badge.classList.add('show'); setTimeout(()=>badge.classList.remove('show'),1100); };
+  if(navigator.clipboard && window.isSecureContext){ navigator.clipboard.writeText(code).then(done,fallback); }
+  else fallback();
+  function fallback(){
+    const t=document.createElement('textarea'); t.value=code; t.style.position='fixed'; t.style.opacity='0';
+    document.body.appendChild(t); t.select();
+    try{ document.execCommand('copy'); done(); }catch(err){}
+    document.body.removeChild(t);
+  }
+});
+
+/* ───── 계정 추가 ───── */
+document.getElementById('addForm').addEventListener('submit',(e)=>{
+  e.preventDefault();
+  const issuer=document.getElementById('issuer').value.trim();
+  const user=document.getElementById('user').value.trim();
+  const secret=document.getElementById('secret').value.trim().toUpperCase().replace(/\s/g,'');
+  const err=document.getElementById('addErr');
+  if(!b32decode(secret) || !totp(secret, Date.now()/1000)){
+    err.textContent='비밀키 형식이 올바르지 않습니다 (Base32: A~Z, 2~7).'; return;
+  }
+  err.textContent='';
+  accounts.push({issuer,user,secret}); save(accounts); render();
+  document.getElementById('user').value=''; document.getElementById('secret').value='';
+  document.querySelector('.add').open=false;
+});
+
+render();
+</script>
+</body>
+</html>
